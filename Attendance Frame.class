@@ -1,0 +1,259 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+import java.util.*;
+
+public class AttendanceFrame extends JFrame implements ActionListener {
+
+    JTextField classField, studentField;
+    JButton addBtn, saveBtn, viewBtn, deleteBtn, updateBtn;
+
+    JPanel studentPanel;
+    ArrayList<StudentRow> studentList = new ArrayList<>();
+
+    public AttendanceFrame() {
+        setTitle("Student Management System");
+        setSize(650, 450);
+        setLayout(new FlowLayout());
+
+        add(new JLabel("Class:"));
+        classField = new JTextField(10);
+        add(classField);
+
+        add(new JLabel("Student Name:"));
+        studentField = new JTextField(10);
+        add(studentField);
+
+        addBtn = new JButton("Add Student");
+        add(addBtn);
+
+        studentPanel = new JPanel();
+        studentPanel.setLayout(new BoxLayout(studentPanel, BoxLayout.Y_AXIS));
+
+        JScrollPane scroll = new JScrollPane(studentPanel);
+        scroll.setPreferredSize(new Dimension(300, 150));
+        add(scroll);
+
+        saveBtn = new JButton("Save Attendance");
+        viewBtn = new JButton("View Students");
+        deleteBtn = new JButton("Delete Student");
+        updateBtn = new JButton("Update Student");
+
+        add(saveBtn);
+        add(viewBtn);
+        add(deleteBtn);
+        add(updateBtn);
+
+        addBtn.addActionListener(this);
+        saveBtn.addActionListener(this);
+        viewBtn.addActionListener(this);
+        deleteBtn.addActionListener(this);
+        updateBtn.addActionListener(this);
+
+        setVisible(true);
+    }
+
+    public void actionPerformed(ActionEvent e) {
+
+        if(e.getSource() == addBtn) {
+            String name = studentField.getText();
+            String phone = JOptionPane.showInputDialog("Enter Phone Number:");
+            String classId = classField.getText();
+
+            addStudentToUI(name, phone, classId);
+            saveStudentToDB(name, phone, classId);
+
+            studentField.setText("");
+        }
+
+        if(e.getSource() == saveBtn) saveAttendance();
+        if(e.getSource() == viewBtn) viewStudents();
+        if(e.getSource() == deleteBtn) deleteStudent();
+        if(e.getSource() == updateBtn) updateStudent();
+    }
+
+    // ✅ Add to UI
+    private void addStudentToUI(String name, String phone, String classId) {
+        StudentRow row = new StudentRow(name, phone, classId);
+        studentList.add(row);
+
+        JPanel p = new JPanel();
+        p.add(row.checkBox);
+        p.add(new JLabel("Marks:"));
+        p.add(row.marksField);
+
+        studentPanel.add(p);
+        studentPanel.revalidate();
+    }
+
+    // ✅ Save student
+    private void saveStudentToDB(String name, String phone, String classId) {
+        try {
+            Connection con = DBConnection.getConnection();
+
+            String query = "INSERT INTO students (name, phone, class_id) VALUES (?, ?, ?)";
+            PreparedStatement ps = con.prepareStatement(query);
+
+            ps.setString(1, name);
+            ps.setString(2, phone);
+            ps.setString(3, classId);
+
+            ps.executeUpdate();
+            con.close();
+
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // ✅ Save attendance + marks
+    private void saveAttendance() {
+        try {
+            Connection con = DBConnection.getConnection();
+
+            String attQ = "INSERT INTO attendance (student_id, class_id, status, date) VALUES (?, ?, ?, CURDATE())";
+            String markQ = "INSERT INTO marks (student_id, class_id, subject, marks) VALUES (?, ?, ?, ?)";
+
+            PreparedStatement attPs = con.prepareStatement(attQ);
+            PreparedStatement markPs = con.prepareStatement(markQ);
+
+            for(StudentRow row : studentList) {
+
+                int id = getStudentId(row.name, row.classId);
+
+                attPs.setInt(1, id);
+                attPs.setString(2, row.classId);
+                attPs.setString(3, row.checkBox.isSelected() ? "P" : "A");
+                attPs.executeUpdate();
+
+                int marks = row.marksField.getText().isEmpty() ? 0 :
+                        Integer.parseInt(row.marksField.getText());
+
+                markPs.setInt(1, id);
+                markPs.setString(2, row.classId);
+                markPs.setString(3, "Java");
+                markPs.setInt(4, marks);
+                markPs.executeUpdate();
+            }
+
+            JOptionPane.showMessageDialog(this, "Attendance Saved!");
+            con.close();
+
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // ✅ View students (FULL DETAILS)
+    private void viewStudents() {
+        try {
+            Connection con = DBConnection.getConnection();
+
+            String classId = classField.getText();
+
+            String query = "SELECT * FROM students WHERE class_id=?";
+            PreparedStatement ps = con.prepareStatement(query);
+            ps.setString(1, classId);
+
+            ResultSet rs = ps.executeQuery();
+
+            String data = "ID | Name | Phone | Class\n";
+
+            while(rs.next()) {
+                data += rs.getInt("id") + " | " +
+                        rs.getString("name") + " | " +
+                        rs.getString("phone") + " | " +
+                        rs.getString("class_id") + "\n";
+            }
+
+            JOptionPane.showMessageDialog(this, data);
+            con.close();
+
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // ✅ DELETE (ID + NAME + CLASS)
+    private void deleteStudent() {
+
+        String idStr = JOptionPane.showInputDialog("Enter Student ID:");
+        String name = JOptionPane.showInputDialog("Enter Student Name:");
+        String classId = classField.getText();
+
+        try {
+            int id = Integer.parseInt(idStr);
+
+            Connection con = DBConnection.getConnection();
+
+            String query = "DELETE FROM students WHERE id=? AND name=? AND class_id=?";
+            PreparedStatement ps = con.prepareStatement(query);
+
+            ps.setInt(1, id);
+            ps.setString(2, name);
+            ps.setString(3, classId);
+
+            int rows = ps.executeUpdate();
+
+            JOptionPane.showMessageDialog(this, rows > 0 ? "Deleted Successfully!" : "Student not found!");
+
+            con.close();
+
+        } catch(Exception e) {
+            JOptionPane.showMessageDialog(this, "Invalid ID!");
+        }
+    }
+
+    // ✅ UPDATE (ID + NAME + CLASS)
+    private void updateStudent() {
+
+        String idStr = JOptionPane.showInputDialog("Enter Student ID:");
+        String oldName = JOptionPane.showInputDialog("Enter Old Name:");
+        String newName = JOptionPane.showInputDialog("Enter New Name:");
+        String classId = classField.getText();
+
+        try {
+            int id = Integer.parseInt(idStr);
+
+            Connection con = DBConnection.getConnection();
+
+            String query = "UPDATE students SET name=? WHERE id=? AND name=? AND class_id=?";
+            PreparedStatement ps = con.prepareStatement(query);
+
+            ps.setString(1, newName);
+            ps.setInt(2, id);
+            ps.setString(3, oldName);
+            ps.setString(4, classId);
+
+            int rows = ps.executeUpdate();
+
+            JOptionPane.showMessageDialog(this, rows > 0 ? "Updated Successfully!" : "Student not found!");
+
+            con.close();
+
+        } catch(Exception e) {
+            JOptionPane.showMessageDialog(this, "Invalid ID!");
+        }
+    }
+
+    // ✅ Get student ID
+    private int getStudentId(String name, String classId) {
+    try {
+        Connection con = DBConnection.getConnection();
+
+        String q = "SELECT id FROM students WHERE name=? AND class_id=?";
+        PreparedStatement ps = con.prepareStatement(q);
+        ps.setString(1, name);
+        ps.setString(2, classId);
+
+        ResultSet rs = ps.executeQuery();
+        if(rs.next()) return rs.getInt("id");
+
+    } catch(Exception e) {
+        e.printStackTrace();
+    }
+
+    return -1;
+}
+}
