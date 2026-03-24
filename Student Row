@@ -1,0 +1,18 @@
+import javax.swing.*;
+
+public class StudentRow {
+    JCheckBox checkBox;
+    JTextField marksField;
+    String name;
+    String phone;
+    String classId;
+
+    public StudentRow(String name, String phone, String classId) {
+        this.name = name;
+        this.phone = phone;
+        this.classId = classId;
+
+        checkBox = new JCheckBox(name);
+        marksField = new JTextField(5);
+    }
+}
